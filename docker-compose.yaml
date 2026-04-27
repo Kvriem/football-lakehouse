@@ -100,6 +100,7 @@ services:
       - AWS_REGION=us-east-1
       - AWS_DEFAULT_REGION=us-east-1
     volumes:
+      - ./:/opt/spark/work-dir
       - ./spark/jars:/opt/spark/jars-extra
       - ./spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
     networks:
@@ -122,6 +123,7 @@ services:
       - AWS_REGION=us-east-1
       - AWS_DEFAULT_REGION=us-east-1
     volumes:
+      - ./:/opt/spark/work-dir
       - ./spark/jars:/opt/spark/jars-extra
       - ./spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
     networks:
