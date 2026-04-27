@@ -143,7 +143,7 @@ This confirms each run is a committed table version while preserving idempotent 
 ### 2) Write Bronze Iceberg tables
 
 ```bash
-docker exec spark /opt/spark/bin/spark-submit --master local[*] /tmp/bronze_upsert_iceberg.py \
+docker exec spark /opt/spark/bin/spark-submit --master local[*] /opt/spark/work-dir/jobs/bronze_upsert_iceberg.py \
   --input-dir /opt/spark/work-dir/data/bronze/statsbomb \
   --competition-id 9 \
   --season-id 281
