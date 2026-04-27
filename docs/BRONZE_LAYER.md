@@ -1,6 +1,6 @@
 # Bronze Layer Documentation
 
-This document describes Bronze ingestion and Bronze Iceberg table logic for the Football Lakehouse project.
+This document describes Bronze ingestion and Bronze Iceberg table logic for the Football Lakehouse project, focused on player performance per team over a season.
 
 ## Bronze Philosophy
 
@@ -45,6 +45,7 @@ Produced raw files:
 - `competitions.parquet`
 - `matches.parquet`
 - `events.parquet`
+- `player_team_match_stats.parquet` (derived player/team/match performance metrics)
 
 ## Bronze Iceberg Write Logic
 
@@ -60,12 +61,35 @@ Main responsibilities:
    - `season` (from `season_id_input`, cast to string)
    - `match_week` (from `match_date`, ISO week, cast to string)
 4. Cast **all fields** to `STRING` before writing
-5. Write to Nessie/Iceberg with partition overwrite for idempotency
+5. Build player performance dataset (`player_team_match_stats`) from events + lineups
+6. Write to Nessie/Iceberg with partition overwrite for idempotency
 
 Default target tables:
 
 - `nessie.bronze.matches_raw`
 - `nessie.bronze.events_raw`
+- `nessie.bronze.player_team_match_stats_raw`
+
+## Player Performance Raw Dataset
+
+The fetcher creates `player_team_match_stats.parquet`, one row per:
+
+- `match_id`
+- `team`
+- `player`
+
+Key raw metrics in this dataset:
+
+- `event_count`
+- `pass_count`
+- `shot_count`
+- `goal_count`
+- `assist_count`
+- `shot_assist_count`
+- `xg`
+- `started` (from lineups)
+- `season`
+- `match_week`
 
 ## Bronze Iceberg Schema
 
@@ -133,6 +157,8 @@ DESCRIBE TABLE nessie.bronze.matches_raw;
 DESCRIBE TABLE EXTENDED nessie.bronze.matches_raw;
 DESCRIBE TABLE nessie.bronze.events_raw;
 DESCRIBE TABLE EXTENDED nessie.bronze.events_raw;
+DESCRIBE TABLE nessie.bronze.player_team_match_stats_raw;
+DESCRIBE TABLE EXTENDED nessie.bronze.player_team_match_stats_raw;
 "
 ```
 

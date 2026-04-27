@@ -41,6 +41,11 @@ def parse_args() -> argparse.Namespace:
         default="nessie.bronze.events_raw",
         help="Fully qualified Iceberg table name for events.",
     )
+    parser.add_argument(
+        "--player-stats-table",
+        default="nessie.bronze.player_team_match_stats_raw",
+        help="Fully qualified Iceberg table name for player/team/match performance.",
+    )
     return parser.parse_args()
 
 
@@ -93,13 +98,16 @@ def create_table_if_missing(
     )
 
 
-def load_and_prepare(input_dir: str, competition_id: int, season_id: int, match_week: Optional[int]) -> tuple[DataFrame, DataFrame]:
+def load_and_prepare(
+    input_dir: str, competition_id: int, season_id: int, match_week: Optional[int]
+) -> tuple[DataFrame, DataFrame, DataFrame]:
     spark = SparkSession.getActiveSession()
     if spark is None:
         raise RuntimeError("Active Spark session not found.")
 
     matches = spark.read.parquet(f"{input_dir}/matches.parquet")
     events = spark.read.parquet(f"{input_dir}/events.parquet")
+    player_stats = spark.read.parquet(f"{input_dir}/player_team_match_stats.parquet")
 
     matches = (
         matches.filter(
@@ -125,7 +133,15 @@ def load_and_prepare(input_dir: str, competition_id: int, season_id: int, match_
     )
     events = cast_all_columns_to_string(events)
 
-    return matches, events
+    player_stats = player_stats.filter(
+        (F.col("competition_id_input") == F.lit(str(competition_id)))
+        & (F.col("season_id_input") == F.lit(str(season_id)))
+    )
+    if match_week is not None:
+        player_stats = player_stats.filter(F.col("match_week") == F.lit(str(match_week)))
+    player_stats = cast_all_columns_to_string(player_stats)
+
+    return matches, events, player_stats
 
 
 def overwrite_partitions(spark: SparkSession, table_name: str, df: DataFrame) -> tuple[Optional[int], Optional[int]]:
@@ -142,7 +158,7 @@ def main() -> None:
 
     spark.sql("CREATE NAMESPACE IF NOT EXISTS nessie.bronze")
 
-    matches_df, events_df = load_and_prepare(
+    matches_df, events_df, player_stats_df = load_and_prepare(
         input_dir=args.input_dir,
         competition_id=args.competition_id,
         season_id=args.season_id,
@@ -156,6 +172,7 @@ def main() -> None:
 
     matches_before, matches_after = overwrite_partitions(spark, args.matches_table, matches_df)
     events_before, events_after = overwrite_partitions(spark, args.events_table, events_df)
+    player_before, player_after = overwrite_partitions(spark, args.player_stats_table, player_stats_df)
 
     print("Bronze upsert completed.")
     print(
@@ -169,6 +186,12 @@ def main() -> None:
         f"rows={events_df.count():,}",
         f"snapshot_before={events_before}",
         f"snapshot_after={events_after}",
+    )
+    print(
+        args.player_stats_table + ":",
+        f"rows={player_stats_df.count():,}",
+        f"snapshot_before={player_before}",
+        f"snapshot_after={player_after}",
     )
 
     spark.stop()

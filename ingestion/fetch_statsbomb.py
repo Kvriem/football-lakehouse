@@ -52,6 +52,111 @@ def _normalize(records: list[dict[str, Any]], extra_cols: dict[str, Any] | None 
     return df
 
 
+def _build_player_team_match_stats(
+    matches: list[dict[str, Any]],
+    events_records: list[dict[str, Any]],
+    lineups_by_match: dict[int, list[dict[str, Any]]],
+    competition_id: int,
+    season_id: int,
+    ingest_ts: str,
+) -> pd.DataFrame:
+    """Create player-team-match performance dataset from raw events + lineups."""
+    if not events_records:
+        return pd.DataFrame()
+
+    events_df = pd.json_normalize(events_records, sep="__")
+    if events_df.empty:
+        return pd.DataFrame()
+
+    required_cols = [
+        "match_id",
+        "player__id",
+        "player__name",
+        "team__id",
+        "team__name",
+        "type__name",
+        "shot__statsbomb_xg",
+        "pass__goal_assist",
+        "pass__shot_assist",
+    ]
+    for col in required_cols:
+        if col not in events_df.columns:
+            events_df[col] = None
+
+    events_df = events_df[events_df["player__id"].notna()].copy()
+    events_df["shot_xg"] = pd.to_numeric(events_df["shot__statsbomb_xg"], errors="coerce").fillna(0.0)
+    events_df["is_pass"] = (events_df["type__name"] == "Pass").astype(int)
+    events_df["is_shot"] = (events_df["type__name"] == "Shot").astype(int)
+    events_df["is_goal"] = (
+        (events_df["type__name"] == "Shot") & (events_df.get("shot__outcome__name") == "Goal")
+    ).astype(int)
+    events_df["is_assist"] = events_df["pass__goal_assist"].fillna(False).astype(bool).astype(int)
+    events_df["is_shot_assist"] = events_df["pass__shot_assist"].fillna(False).astype(bool).astype(int)
+
+    perf = (
+        events_df.groupby(
+            ["match_id", "player__id", "player__name", "team__id", "team__name"],
+            dropna=False,
+            as_index=False,
+        )
+        .agg(
+            event_count=("type__name", "count"),
+            pass_count=("is_pass", "sum"),
+            shot_count=("is_shot", "sum"),
+            goal_count=("is_goal", "sum"),
+            assist_count=("is_assist", "sum"),
+            shot_assist_count=("is_shot_assist", "sum"),
+            xg=("shot_xg", "sum"),
+        )
+    )
+
+    # Add "started" signal from lineups.
+    lineup_rows: list[dict[str, Any]] = []
+    for match in matches:
+        match_id = int(match["match_id"])
+        for team in lineups_by_match.get(match_id, []):
+            team_id = team.get("team_id")
+            team_name = team.get("team_name")
+            for player in team.get("lineup", []):
+                lineup_rows.append(
+                    {
+                        "match_id": match_id,
+                        "player__id": player.get("player_id"),
+                        "team__id": team_id,
+                        "team__name": team_name,
+                        "started": 1,
+                    }
+                )
+
+    lineup_df = pd.DataFrame(lineup_rows)
+    if not lineup_df.empty:
+        perf = perf.merge(
+            lineup_df.drop_duplicates(["match_id", "player__id", "team__id"]),
+            on=["match_id", "player__id", "team__id", "team__name"],
+            how="left",
+        )
+    perf["started"] = perf["started"].fillna(0).astype(int)
+
+    # Add season and match week context.
+    match_meta = pd.json_normalize(matches, sep="__")
+    match_meta = match_meta[["match_id", "match_date"]].copy()
+    match_meta["match_date"] = pd.to_datetime(match_meta["match_date"], errors="coerce")
+    match_meta["match_week"] = match_meta["match_date"].dt.isocalendar().week.astype("Int64")
+    perf = perf.merge(match_meta[["match_id", "match_week"]], on="match_id", how="left")
+    perf["season"] = str(season_id)
+
+    perf["competition_id_input"] = competition_id
+    perf["season_id_input"] = season_id
+    perf["ingested_at_utc"] = ingest_ts
+    perf["source"] = "statsbomb_open_data"
+
+    # Bronze-friendly scalar conversion.
+    for col in perf.columns:
+        perf[col] = perf[col].map(_to_scalar)
+
+    return perf
+
+
 def _write_df(df: pd.DataFrame, output_path: Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -93,9 +198,11 @@ def main() -> None:
 
     # Pull events per match and tag with match_id before normalizing.
     events_records: list[dict[str, Any]] = []
+    lineups_by_match: dict[int, list[dict[str, Any]]] = {}
     for m in matches:
         match_id = m["match_id"]
         match_events = _fetch_json(f"{BASE_URL}/events/{match_id}.json")
+        lineups_by_match[match_id] = _fetch_json(f"{BASE_URL}/lineups/{match_id}.json")
         for event in match_events:
             event["match_id"] = match_id
             events_records.append(event)
@@ -119,15 +226,30 @@ def main() -> None:
             "season_id_input": args.season_id,
         },
     )
+    player_team_match_stats_df = _build_player_team_match_stats(
+        matches=matches,
+        events_records=events_records,
+        lineups_by_match=lineups_by_match,
+        competition_id=args.competition_id,
+        season_id=args.season_id,
+        ingest_ts=ingest_ts,
+    )
 
     comp_out = _write_df(competitions_df, args.output_dir / "competitions.parquet")
     match_out = _write_df(matches_df, args.output_dir / "matches.parquet")
     events_out = _write_df(events_df, args.output_dir / "events.parquet")
+    player_perf_out = _write_df(
+        player_team_match_stats_df,
+        args.output_dir / "player_team_match_stats.parquet",
+    )
 
     print("Ingestion complete.")
     print(f"- Competitions: {len(competitions_df):,} rows -> {comp_out}")
     print(f"- Matches: {len(matches_df):,} rows -> {match_out}")
     print(f"- Events: {len(events_df):,} rows -> {events_out}")
+    print(
+        f"- PlayerTeamMatchStats: {len(player_team_match_stats_df):,} rows -> {player_perf_out}"
+    )
 
 
 if __name__ == "__main__":

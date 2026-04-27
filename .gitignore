@@ -1,0 +1,29 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Local data outputs
+data/
+*.parquet
+*.csv
+
+# Spark/local artifacts
+spark/jars/
+metastore_db/
+spark-warehouse/
+derby.log
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
