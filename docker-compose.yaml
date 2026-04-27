@@ -3,10 +3,37 @@
 ###########################################
 
 services:
-  # Nessie Catalog Server Using In-Memory Store
+  # Nessie metadata database (persistent)
+  nessie-postgres:
+    image: postgres:16
+    container_name: nessie-postgres
+    environment:
+      - POSTGRES_DB=nessie
+      - POSTGRES_USER=nessie
+      - POSTGRES_PASSWORD=nessie
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nessie -d nessie"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - nessie_db_data:/var/lib/postgresql/data
+    networks:
+      iceberg:
+
+  # Nessie Catalog Server (Postgres-backed persistent store)
   nessie:
     image: projectnessie/nessie:latest
     container_name: nessie
+    depends_on:
+      nessie-postgres:
+        condition: service_healthy
+    environment:
+      - NESSIE_VERSION_STORE_TYPE=JDBC
+      - NESSIE_VERSION_STORE_PERSIST_JDBC_DATASOURCE=postgresql
+      - QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://nessie-postgres:5432/nessie
+      - QUARKUS_DATASOURCE_USERNAME=nessie
+      - QUARKUS_DATASOURCE_PASSWORD=nessie
     networks:
       iceberg:
     ports:
@@ -133,6 +160,7 @@ services:
 volumes:
   minio_data:
   dremio_data:
+  nessie_db_data:
 
 networks:
   iceberg:
