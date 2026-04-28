@@ -1,164 +1,136 @@
 # Infrastructure README
 
-This document explains the local infrastructure for the Football Lakehouse stack and how to set it up from scratch.
+This document covers the local stack used by this project and how each service participates in Iceberg table operations.
 
 ## Architecture
 
 ```text
-                           +---------------------------+
-                           |        Dremio UI          |
-                           |      http://:9047         |
-                           +------------+--------------+
-                                        |
-                                        | SQL over Iceberg catalog
-                                        v
-+------------------+          +---------+-----------------------------+
-|   Spark Worker   |<---------+          Spark Master                 |
-|  (executes jobs) | spark:// |  - Iceberg + Nessie catalog config   |
-+--------+---------+          |  - Writes table metadata via Nessie   |
-         |                    |  - Writes data files to MinIO         |
-         |                    +-------------------+--------------------+
-         |                                        |
-         |                                        | Catalog operations
-         |                                        v
-         |                            +-----------+-----------+
-         |                            |       Nessie          |
-         |                            |  http://:19120/api/v1 |
-         |                            +-----------+-----------+
-         |                                        |
-         |                                        | S3 API
-         v                                        v
-+--------+----------------------------------------+--------+
-|                        MinIO                              |
-|                     http://:9001                          |
-|    Bucket: football-lake                                  |
-|    Prefixes: bronze/, silver/, gold/                      |
-+-----------------------------------------------------------+
+StatsBomb files -> Python/PySpark jobs -> Spark Catalog (Nessie) -> MinIO (Iceberg data files)
+                                                        |
+                                                        v
+                                                  Dremio SQL
 ```
 
-## Services
+Control and storage boundaries:
 
-| Service | Purpose | URL/Port |
+- Spark handles compute and Iceberg write/read operations.
+- Nessie stores Iceberg catalog metadata and branch history.
+- MinIO stores table data files and manifests under `s3a://football-lake/`.
+- Dremio queries Iceberg tables via Nessie metadata.
+
+## Service Inventory
+
+| Service | Role | Endpoint |
 |---|---|---|
-| MinIO | Object storage for Iceberg data files | API: `http://localhost:9000`, UI: `http://localhost:9001` |
-| Nessie | Catalog and branching for Iceberg metadata | `http://localhost:19120/api/v1` |
-| Spark master | Spark control plane + SQL entry point | Master: `spark://localhost:7077`, UI: `http://localhost:8080` |
-| Spark worker | Spark execution resources | UI: `http://localhost:8081` |
-| Dremio | SQL analytics/query engine | `http://localhost:9047` |
+| `minio` | S3-compatible object store | API `http://localhost:9000`, UI `http://localhost:9001` |
+| `minio-init` | Creates bucket and layer prefixes | Runs once during startup |
+| `nessie-postgres` | Persistent backing store for Nessie | Internal service |
+| `nessie` | Catalog + branching API | `http://localhost:19120/api/v1` |
+| `spark` | Spark master process | `spark://localhost:7077`, UI `http://localhost:8080` |
+| `spark-worker` | Spark worker process | UI `http://localhost:8081` |
+| `jupyter` | Notebook runtime for jobs | `http://localhost:8888` |
+| `dremio` | SQL and BI query layer | `http://localhost:9047` |
+
+## Storage Layout
+
+Bucket created at startup:
+
+- `football-lake`
+
+Prefix layout:
+
+- `football-lake/bronze/`
+- `football-lake/silver/`
+- `football-lake/gold/`
 
 ## Prerequisites
 
 - Docker Engine
-- Docker Compose (v2)
+- Docker Compose v2
 - `curl`
 
-## Setup Steps
+## Bootstrap
 
-### 1) Start infrastructure
-
-```bash
-docker compose up -d
-```
-
-### 2) Download Spark runtime dependencies (Iceberg/Nessie/S3)
+1) Download Spark runtime jars (Iceberg, Nessie, Hadoop AWS, AWS SDK):
 
 ```bash
 ./scripts/setup_spark_jars.sh
 ```
 
-If jars are missing when Spark starts, rerun:
-
-```bash
-docker compose restart spark spark-worker
-```
-
-### 3) Verify MinIO bucket and prefixes
-
-The `minio-init` service bootstraps:
-
-- bucket: `football-lake`
-- prefixes: `bronze/`, `silver/`, `gold/`
-
-Manual check:
-
-```bash
-docker run --rm --entrypoint /bin/sh --network footballiq_iceberg minio/mc -c \
-"mc alias set local http://minio:9000 admin password >/dev/null && mc ls local/football-lake"
-```
-
-### 4) Verify Nessie API and `main` branch
-
-```bash
-curl -fsS http://localhost:19120/api/v1/config
-curl -fsS http://localhost:19120/api/v1/trees
-```
-
-Expected:
-
-- `defaultBranch` is `main`
-- branch list includes `main`
-
-### 5) Verify Spark catalog wiring
-
-Spark uses Nessie as the Iceberg catalog through `spark/conf/spark-defaults.conf`:
-
-- `spark.sql.catalog.nessie=org.apache.iceberg.spark.SparkCatalog`
-- `spark.sql.catalog.nessie.catalog-impl=org.apache.iceberg.nessie.NessieCatalog`
-- `spark.sql.catalog.nessie.uri=http://nessie:19120/api/v1`
-- `spark.sql.catalog.nessie.ref=main`
-- `spark.sql.catalog.nessie.warehouse=s3a://football-lake/`
-
-### 6) Run smoke test
-
-```bash
-./scripts/smoke-test.sh
-```
-
-This verifies:
-
-- MinIO/Nessie reachability
-- bucket availability
-- Spark can create/query an Iceberg table via Nessie
-- Dremio endpoint is reachable
-
-## Access and Default Credentials
-
-| Service | Username | Password |
-|---|---|---|
-| MinIO | `admin` | `password` |
-| Dremio | Set on first login | Set on first login |
-
-## Common Operations
-
-### Start
+2) Start all services:
 
 ```bash
 docker compose up -d
 ```
 
-### Stop
+3) Run end-to-end infrastructure verification:
+
+```bash
+./scripts/smoke-test.sh
+```
+
+## What the Smoke Test Validates
+
+`scripts/smoke-test.sh` verifies that:
+
+- Nessie API is reachable.
+- MinIO health endpoint is reachable.
+- `football-lake` bucket is available.
+- Spark can create, insert, and query an Iceberg table through Nessie.
+- Dremio endpoint is reachable.
+
+## Spark Catalog Wiring
+
+Configured in `spark/conf/spark-defaults.conf`:
+
+- `spark.sql.extensions` enables Iceberg + Nessie Spark extensions.
+- `spark.sql.catalog.nessie` uses `SparkCatalog` with `NessieCatalog`.
+- `spark.sql.catalog.nessie.uri=http://nessie:19120/api/v1`
+- `spark.sql.catalog.nessie.ref=main`
+- `spark.sql.catalog.nessie.warehouse=s3a://football-lake/`
+- `spark.sql.catalog.nessie.s3.endpoint=http://minio:9000`
+
+## Access and Credentials
+
+| Service | Username | Password |
+|---|---|---|
+| MinIO | `admin` | `password` |
+| Jupyter token | N/A | `footballiq` |
+| Dremio | Set on first login | Set on first login |
+
+## Operations
+
+Start:
+
+```bash
+docker compose up -d
+```
+
+Stop:
 
 ```bash
 docker compose down
 ```
 
-### Stop + remove volumes (full reset)
+Stop and reset volumes:
 
 ```bash
 docker compose down -v
 ```
 
-### View logs
+Follow logs:
 
 ```bash
-docker compose logs -f minio nessie spark spark-worker dremio
+docker compose logs -f nessie minio spark spark-worker jupyter dremio
 ```
 
 ## Troubleshooting
 
-- Spark jobs stuck with "Initial job has not accepted any resources"
-  - Ensure `spark-worker` is running: `docker compose ps`
-- Iceberg writes fail with AWS region errors
-  - Confirm `spark-defaults.conf` contains MinIO/Nessie S3 region settings (`us-east-1`)
-- MinIO prefixes visible in MinIO but not Dremio
-  - This is expected until actual Iceberg tables are created and registered in Nessie
+- Spark has no resources:
+  - Confirm `spark-worker` is healthy: `docker compose ps`.
+- Spark cannot access MinIO:
+  - Re-check endpoint and credentials in `spark/conf/spark-defaults.conf`.
+- Catalog operations fail:
+  - Verify `nessie` and `nessie-postgres` are both up.
+- Dremio cannot show tables:
+  - Ensure Iceberg tables were already created in Spark on the same Nessie branch.
