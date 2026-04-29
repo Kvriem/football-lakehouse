@@ -30,6 +30,10 @@ Control and storage boundaries:
 | `spark-worker` | Spark worker process | UI `http://localhost:8081` |
 | `jupyter` | Notebook runtime for jobs | `http://localhost:8888` |
 | `dremio` | SQL and BI query layer | `http://localhost:9047` |
+| `airflow-postgres` | Airflow metadata DB | Internal service |
+| `airflow-init` | One-shot DB migrate + admin user + pool seed | Runs once on `up` |
+| `airflow-scheduler` | Schedules DAG runs and dispatches tasks | Internal service |
+| `airflow-webserver` | Airflow UI and REST API | `http://localhost:8085` |
 
 ## Storage Layout
 
@@ -97,6 +101,25 @@ Configured in `spark/conf/spark-defaults.conf`:
 | MinIO | `admin` | `password` |
 | Jupyter token | N/A | `footballiq` |
 | Dremio | Set on first login | Set on first login |
+| Airflow | `admin` | `admin` |
+
+## Orchestration Layer
+
+Airflow orchestrates the medallion pipeline on independent schedules:
+
+- `bronze_silver_weekly` -> Mon 02:00 UTC
+- `gold_match_kpi_weekly` -> Mon 03:00 UTC
+- `gold_season_kpi_monthly` -> 1st of each month 04:00 UTC
+- `gold_form_last5_5weeks` -> every 5 weeks
+
+See [`docs/AIRFLOW_README.md`](AIRFLOW_README.md) for the full DAG topology, branch promotion strategy, and runbook.
+
+Build and start the Airflow services:
+
+```bash
+docker compose build airflow-init airflow-scheduler airflow-webserver
+docker compose up -d airflow-postgres airflow-init airflow-scheduler airflow-webserver
+```
 
 ## Operations
 
@@ -121,7 +144,7 @@ docker compose down -v
 Follow logs:
 
 ```bash
-docker compose logs -f nessie minio spark spark-worker jupyter dremio
+docker compose logs -f nessie minio spark spark-worker jupyter dremio airflow-scheduler airflow-webserver
 ```
 
 ## Troubleshooting
