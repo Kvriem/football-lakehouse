@@ -227,21 +227,22 @@ services:
       - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
-      - AIRFLOW__WEBSERVER__SECRET_KEY=footballiq-airflow-secret
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY:-footballiq-airflow-secret}
       - _AIRFLOW_DB_UPGRADE=true
-      - _AIRFLOW_WWW_USER_USERNAME=admin
-      - _AIRFLOW_WWW_USER_PASSWORD=admin
+      - _AIRFLOW_WWW_USER_USERNAME=${AIRFLOW_ADMIN_USERNAME:-admin}
+      - _AIRFLOW_WWW_USER_PASSWORD=${AIRFLOW_ADMIN_PASSWORD:-admin}
     entrypoint: /bin/bash
     command:
       - -c
       - |
-        airflow db migrate &&
+        set -e
+        airflow db migrate
         airflow users create \
           --username "$${_AIRFLOW_WWW_USER_USERNAME}" \
           --password "$${_AIRFLOW_WWW_USER_PASSWORD}" \
           --firstname Admin --lastname Admin \
-          --role Admin --email admin@example.com || true &&
-        airflow pools set spark_jobs 1 "Single-writer pool for Spark/Iceberg jobs" || true &&
+          --role Admin --email admin@example.com || true
+        airflow pools set spark_jobs 1 "Single-writer pool for Spark/Iceberg jobs"
         chmod -R 0777 /opt/airflow/work-dir/data || true
     volumes:
       - ./dags:/opt/airflow/dags
@@ -271,7 +272,7 @@ services:
       - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
-      - AIRFLOW__WEBSERVER__SECRET_KEY=footballiq-airflow-secret
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY:-footballiq-airflow-secret}
       - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
       - FOOTBALLIQ_REPO_HOST_PATH=${PWD}
     command: webserver
@@ -290,7 +291,6 @@ services:
       - ./scripts:/opt/airflow/scripts
       - ./:/opt/airflow/work-dir
       - airflow_logs:/opt/airflow/logs
-      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       iceberg:
 
@@ -311,7 +311,7 @@ services:
       - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
-      - AIRFLOW__WEBSERVER__SECRET_KEY=footballiq-airflow-secret
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY:-footballiq-airflow-secret}
       - AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL=10
       - FOOTBALLIQ_REPO_HOST_PATH=${PWD}
     command: scheduler

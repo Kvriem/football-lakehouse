@@ -54,9 +54,12 @@ with DAG(
         bash_command=spark_submit(
             f"{SPARK_WORKDIR}/jobs/gold_form_last5_job.py",
             [
-                "--season-id {{ params.season_id }}",
-                "--target-branch gold_dev",
-                "--base-branch dev",
+                "--season-id",
+                "{{ params.season_id }}",
+                "--target-branch",
+                "gold_dev",
+                "--base-branch",
+                "dev",
             ],
         ),
     )
@@ -67,20 +70,29 @@ with DAG(
         bash_command=spark_submit(
             f"{SPARK_WORKDIR}/jobs/post_write_validate.py",
             [
-                "--table nessie.gold.player_form_last5",
-                "--branch gold_dev",
-                "--season-id {{ params.season_id }}",
-                "--grain-cols season_id match_week match_id player_id",
-                "--min-rows 1",
+                "--table",
+                "nessie.gold.player_form_last5",
+                "--branch",
+                "gold_dev",
+                "--season-id",
+                "{{ params.season_id }}",
+                "--grain-cols",
+                "season_id",
+                "match_week",
+                "match_id",
+                "player_id",
+                "--min-rows",
+                "1",
             ],
         ),
     )
 
     promote_gold_to_dev = BashOperator(
         task_id="promote_gold_to_dev",
+        pool=SPARK_POOL,
         bash_command=python_in_airflow(
             f"{AIRFLOW_WORKDIR}/jobs/promote_branch.py",
-            ["--from-ref gold_dev", "--into-ref dev"],
+            ["--from-ref", "gold_dev", "--into-ref", "dev"],
         ),
         cwd=AIRFLOW_WORKDIR,
     )

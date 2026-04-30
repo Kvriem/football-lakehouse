@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from datetime import timedelta
 from typing import Iterable, List
+import shlex
 
 # --- Static config ---------------------------------------------------------
 
@@ -51,21 +52,21 @@ DEFAULT_DAG_ARGS = {
 
 def docker_exec(command: str) -> str:
     """Wrap a command so it runs inside the spark container."""
-    return f'docker exec {SPARK_CONTAINER} bash -lc "{command}"'
+    return f"docker exec {shlex.quote(SPARK_CONTAINER)} bash -lc {shlex.quote(command)}"
 
 
 def spark_submit(script_path_in_container: str, args: Iterable[str]) -> str:
     """Build a spark-submit command for a Python job inside the spark container."""
     flat_args: List[str] = list(args)
-    args_str = " ".join(flat_args)
+    args_str = " ".join(shlex.quote(a) for a in flat_args)
     return docker_exec(
         f"/opt/spark/bin/spark-submit "
-        f"--master {SPARK_MASTER} "
-        f"{script_path_in_container} {args_str}"
+        f"--master {shlex.quote(SPARK_MASTER)} "
+        f"{shlex.quote(script_path_in_container)} {args_str}"
     )
 
 
 def python_in_airflow(script_path: str, args: Iterable[str]) -> str:
     """Build a python invocation that runs inside the airflow worker."""
-    args_str = " ".join(list(args))
-    return f"python {script_path} {args_str}"
+    args_str = " ".join(shlex.quote(a) for a in list(args))
+    return f"python {shlex.quote(script_path)} {args_str}"

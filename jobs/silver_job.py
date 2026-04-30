@@ -233,9 +233,7 @@ def main() -> None:
     bronze_df = spark.table(BRONZE_TABLE)
     canonical_df = canonicalize(bronze_df)
     typed_df = apply_typed_contract(canonical_df)
-    cleaned_df = apply_quality_filters(typed_df)
-
-    scoped_df = filter_scope(cleaned_df, args.season_id, args.match_week)
+    scoped_df = filter_scope(typed_df, args.season_id, args.match_week)
 
     if scoped_df.rdd.isEmpty():
         logger.warning(
@@ -247,11 +245,12 @@ def main() -> None:
         return
 
     valid_count = hard_checks(scoped_df, args.null_ratio_threshold)
-    soft_observability(scoped_df)
+    cleaned_scoped_df = apply_quality_filters(scoped_df)
+    soft_observability(cleaned_scoped_df)
 
     ensure_silver_table(spark)
 
-    scoped_df.writeTo(SILVER_TABLE).overwritePartitions()
+    cleaned_scoped_df.writeTo(SILVER_TABLE).overwritePartitions()
 
     written_count = spark.table(SILVER_TABLE).filter(
         F.col("season_id") == F.lit(args.season_id)

@@ -68,6 +68,17 @@ def main() -> None:
             f"Validation failed: {args.table}@{args.branch} rows={total} < min_rows={args.min_rows}"
         )
 
+    null_expr = None
+    for col in args.grain_cols:
+        col_is_null = F.col(col).isNull()
+        null_expr = col_is_null if null_expr is None else (null_expr | col_is_null)
+    null_grain_rows = df.filter(null_expr).count() if null_expr is not None else 0
+    if null_grain_rows > 0:
+        raise RuntimeError(
+            "Validation failed: "
+            f"{args.table}@{args.branch} has null grain rows={null_grain_rows}"
+        )
+
     duplicates = df.groupBy(*args.grain_cols).count().filter("count > 1").count()
     if duplicates > 0:
         raise RuntimeError(

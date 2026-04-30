@@ -74,9 +74,10 @@ def build_form_last5(match_kpis_df: DataFrame) -> DataFrame:
         "goal_contribution",
     )
 
+    # Use match_id for ordering to avoid ISO week wrap issues at year boundaries.
     w_last5 = (
         Window.partitionBy("season_id", "player_id")
-        .orderBy(F.col("match_week").asc(), F.col("match_id").asc())
+        .orderBy(F.col("match_id").asc())
         .rowsBetween(-4, 0)
     )
 

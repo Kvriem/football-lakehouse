@@ -43,12 +43,24 @@ def ensure_branch(
         return target_hash
 
     payload = {"type": "BRANCH", "name": target, "hash": base_hash}
-    _http_json(
-        "POST",
-        f"{nessie_url}/trees/tree?{parse.urlencode({'sourceRefName': base})}",
-        payload=payload,
-        timeout=30,
-    )
+    try:
+        _http_json(
+            "POST",
+            f"{nessie_url}/trees/tree?{parse.urlencode({'sourceRefName': base})}",
+            payload=payload,
+            timeout=30,
+        )
+    except RuntimeError:
+        # Idempotency under concurrent creators: if branch now exists, treat as success.
+        raced_hash = _get_branch_hash(nessie_url, target)
+        if raced_hash is not None:
+            logger.info(
+                "Branch %r appeared concurrently during create (%s)",
+                target,
+                raced_hash[:12],
+            )
+            return raced_hash
+        raise
 
     new_hash = _get_branch_hash(nessie_url, target)
     if new_hash is None:
@@ -92,6 +104,10 @@ def _http_json(
     payload: Optional[dict[str, Any]] = None,
     timeout: int = 30,
 ) -> dict[str, Any]:
+    parsed = parse.urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError(f"Unsupported URL scheme in {url!r}")
+
     data = None
     headers = {"Accept": "application/json"}
     if payload is not None:

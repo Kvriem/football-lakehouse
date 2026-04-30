@@ -60,10 +60,14 @@ with DAG(
         bash_command=python_in_airflow(
             f"{AIRFLOW_WORKDIR}/ingestion/fetch_statsbomb.py",
             [
-                "--competition-id {{ params.competition_id }}",
-                "--season-id {{ params.season_id }}",
-                "--max-matches {{ params.max_matches }}",
-                f"--output-dir {AIRFLOW_WORKDIR}/data/bronze/statsbomb",
+                "--competition-id",
+                "{{ params.competition_id }}",
+                "--season-id",
+                "{{ params.season_id }}",
+                "--max-matches",
+                "{{ params.max_matches }}",
+                "--output-dir",
+                f"{AIRFLOW_WORKDIR}/data/bronze/statsbomb",
             ],
         ),
         cwd=AIRFLOW_WORKDIR,
@@ -75,9 +79,12 @@ with DAG(
         bash_command=spark_submit(
             f"{SPARK_WORKDIR}/jobs/bronze_upsert_iceberg.py",
             [
-                f"--input-dir {SPARK_WORKDIR}/data/bronze/statsbomb",
-                "--competition-id {{ params.competition_id }}",
-                "--season-id {{ params.season_id }}",
+                "--input-dir",
+                f"{SPARK_WORKDIR}/data/bronze/statsbomb",
+                "--competition-id",
+                "{{ params.competition_id }}",
+                "--season-id",
+                "{{ params.season_id }}",
             ],
         ),
     )
@@ -88,9 +95,12 @@ with DAG(
         bash_command=spark_submit(
             f"{SPARK_WORKDIR}/jobs/silver_job.py",
             [
-                "--season-id {{ params.season_id }}",
-                "--target-branch dev",
-                "--base-branch main",
+                "--season-id",
+                "{{ params.season_id }}",
+                "--target-branch",
+                "dev",
+                "--base-branch",
+                "main",
             ],
         ),
     )
@@ -101,11 +111,20 @@ with DAG(
         bash_command=spark_submit(
             f"{SPARK_WORKDIR}/jobs/post_write_validate.py",
             [
-                "--table nessie.silver.player_team_match_stats",
-                "--branch dev",
-                "--season-id {{ params.season_id }}",
-                "--grain-cols season_id match_week match_id player_id team_id",
-                "--min-rows 1",
+                "--table",
+                "nessie.silver.player_team_match_stats",
+                "--branch",
+                "dev",
+                "--season-id",
+                "{{ params.season_id }}",
+                "--grain-cols",
+                "season_id",
+                "match_week",
+                "match_id",
+                "player_id",
+                "team_id",
+                "--min-rows",
+                "1",
             ],
         ),
     )
@@ -114,7 +133,7 @@ with DAG(
         task_id="promote_dev_to_main",
         bash_command=python_in_airflow(
             f"{AIRFLOW_WORKDIR}/jobs/promote_branch.py",
-            ["--from-ref dev", "--into-ref main"],
+            ["--from-ref", "dev", "--into-ref", "main"],
         ),
         cwd=AIRFLOW_WORKDIR,
     )
