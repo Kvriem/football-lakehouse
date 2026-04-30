@@ -193,10 +193,151 @@ services:
       timeout: 10s
       retries: 15
 
+  # Airflow metadata DB (separate from Nessie's Postgres)
+  airflow-postgres:
+    image: postgres:16
+    container_name: airflow-postgres
+    environment:
+      - POSTGRES_DB=airflow
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - airflow_pg_data:/var/lib/postgresql/data
+    networks:
+      iceberg:
+
+  # One-shot bootstrap: db migrate + admin user
+  airflow-init:
+    build:
+      context: ./docker/airflow
+    image: footballiq/airflow:2.9.3
+    container_name: airflow-init
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    user: "0:0"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY:-footballiq-airflow-secret}
+      - _AIRFLOW_DB_UPGRADE=true
+      - _AIRFLOW_WWW_USER_USERNAME=${AIRFLOW_ADMIN_USERNAME:-admin}
+      - _AIRFLOW_WWW_USER_PASSWORD=${AIRFLOW_ADMIN_PASSWORD:-admin}
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        set -e
+        airflow db migrate
+        airflow users create \
+          --username "$${_AIRFLOW_WWW_USER_USERNAME}" \
+          --password "$${_AIRFLOW_WWW_USER_PASSWORD}" \
+          --firstname Admin --lastname Admin \
+          --role Admin --email admin@example.com || true
+        airflow pools set spark_jobs 1 "Single-writer pool for Spark/Iceberg jobs"
+        chmod -R 0777 /opt/airflow/work-dir/data || true
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./jobs:/opt/airflow/jobs
+      - ./ingestion:/opt/airflow/ingestion
+      - ./scripts:/opt/airflow/scripts
+      - ./:/opt/airflow/work-dir
+      - airflow_logs:/opt/airflow/logs
+    networks:
+      iceberg:
+    restart: "no"
+
+  airflow-webserver:
+    build:
+      context: ./docker/airflow
+    image: footballiq/airflow:2.9.3
+    container_name: airflow-webserver
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    user: "0:0"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY:-footballiq-airflow-secret}
+      - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+      - FOOTBALLIQ_REPO_HOST_PATH=${PWD}
+    command: webserver
+    ports:
+      - 8085:8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./jobs:/opt/airflow/jobs
+      - ./ingestion:/opt/airflow/ingestion
+      - ./scripts:/opt/airflow/scripts
+      - ./:/opt/airflow/work-dir
+      - airflow_logs:/opt/airflow/logs
+    networks:
+      iceberg:
+
+  airflow-scheduler:
+    build:
+      context: ./docker/airflow
+    image: footballiq/airflow:2.9.3
+    container_name: airflow-scheduler
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    user: "0:0"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY:-footballiq-airflow-secret}
+      - AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL=10
+      - FOOTBALLIQ_REPO_HOST_PATH=${PWD}
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$(hostname)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./jobs:/opt/airflow/jobs
+      - ./ingestion:/opt/airflow/ingestion
+      - ./scripts:/opt/airflow/scripts
+      - ./:/opt/airflow/work-dir
+      - airflow_logs:/opt/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      iceberg:
+
 volumes:
   minio_data:
   dremio_data:
   nessie_db_data:
+  airflow_pg_data:
+  airflow_logs:
 
 networks:
   iceberg:

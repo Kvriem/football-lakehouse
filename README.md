@@ -2,7 +2,12 @@
 
 End-to-end football analytics lakehouse using Apache Spark, Apache Iceberg, Project Nessie, MinIO, and Dremio.
 
+ 
 ![FootballIQ Architecture](docs/arch.png)
+
+![Nessie Branching](docs/nessie_branching.png)
+
+![Airflow Dags](docs/airflow_orchestration.png)
 
 ## What This Project Delivers
 
@@ -10,50 +15,76 @@ End-to-end football analytics lakehouse using Apache Spark, Apache Iceberg, Proj
 - Idempotent batch processing with partition overwrite on Iceberg tables.
 - Catalog-level governance and promotion with Nessie branching (`main`, `dev`, `gold_dev`).
 - Query-ready marts for match KPIs, season KPIs, and rolling form KPIs.
+- Airflow orchestration with independent schedules per KPI mart (weekly, monthly, every 5 weeks).
 
 ## Architecture
 
 ```text
-StatsBomb Open Data (JSON)
-        |
-        v
-ingestion/fetch_statsbomb.py
-        |
-        v
-Bronze files (local parquet) -> jobs/bronze_upsert_iceberg.py -> nessie.bronze.*
-                                                        |
-                                                        v
-jobs/silver_clean_enrich_bronze_fresh.ipynb -> nessie.silver.player_team_match_stats
-                                                        |
-                                                        v
-jobs/gold_silver.ipynb -> nessie.gold.player_match_kpis
-                          nessie.gold.player_season_kpis
-                          nessie.gold.player_form_last5
-                                                        |
-                                                        v
-Dremio SQL analytics
+                 Airflow (scheduler + webserver)
+                  |          |              |
+                  v          v              v
+        weekly DAG     monthly DAG    every-5-weeks DAG
+                       (each pinned to a Nessie branch via Spark catalog ref)
+                          |
+                          v
+StatsBomb JSON -> ingestion/fetch_statsbomb.py
+                          |
+                          v
+Bronze parquet -> jobs/bronze_upsert_iceberg.py -> nessie.bronze.*
+                          |
+                          v
+              jobs/silver_job.py -> nessie.silver.player_team_match_stats
+                          |
+        +-----------------+-----------------+
+        v                 v                 v
+gold_match_kpi_job  gold_season_kpi_job  gold_form_last5_job
+        |                 |                 |
+        v                 v                 v
+nessie.gold.player_match_kpis
+nessie.gold.player_season_kpis
+nessie.gold.player_form_last5
+                          |
+                          v
+                    Dremio SQL analytics
 ```
 
 ## Project Hierarchy
 
 ```text
 footballiq/
-├── data/                              
+├── dags/                              # Airflow DAGs (orchestration layer)
+│   ├── footballiq_common.py
+│   ├── bronze_silver_weekly_dag.py
+│   ├── gold_match_weekly_dag.py
+│   ├── gold_season_monthly_dag.py
+│   └── gold_form_5weeks_dag.py
+├── data/                              # Local bronze extraction outputs
+├── docker/airflow/Dockerfile          # Custom Airflow image
 ├── docs/
 │   ├── BRONZE_LAYER.md
 │   ├── SILVER_LAYER_README.md
 │   ├── GOLD_LAYER_README.md
+│   ├── AIRFLOW_README.md
 │   └── INFRA_README.md
 ├── ingestion/
 │   └── fetch_statsbomb.py             # Pulls and normalizes source JSON
 ├── jobs/
 │   ├── bronze_upsert_iceberg.py       # Bronze -> Iceberg (idempotent overwrite)
-│   ├── silver_clean_enrich_bronze_fresh.ipynb
-│   ├── gold_silver.ipynb
-│   └── merge_gold_dev_main.py         # Nessie merge automation
+│   ├── silver_job.py                  # Silver script entrypoint
+│   ├── gold_match_kpi_job.py          # Gold match KPIs
+│   ├── gold_season_kpi_job.py         # Gold season KPIs + ranks
+│   ├── gold_form_last5_job.py         # Gold rolling-form KPIs
+│   ├── post_write_validate.py         # Post-write Iceberg validator
+│   ├── promote_branch.py              # Nessie merge helper
+│   ├── nessie_utils.py                # Branch lifecycle helpers
+│   ├── spark_session.py               # Shared Spark session factory
+│   ├── silver_clean_enrich_bronze_fresh.ipynb  # Original Silver dev notebook
+│   ├── gold_silver.ipynb              # Original Gold dev notebook
+│   └── merge_gold_dev_main.py
 ├── scripts/
 │   ├── setup_spark_jars.sh
-│   └── smoke-test.sh
+│   ├── smoke-test.sh
+│   └── run-manual-backfill.sh         # Manual orchestration trigger
 ├── spark/conf/spark-defaults.conf
 ├── docker-compose.yaml
 └── README.md
@@ -108,18 +139,19 @@ Raw player-match sample (`data/bronze/statsbomb/player_team_match_stats.parquet`
 
 ### 3) Silver transformation
 
-- `jobs/silver_clean_enrich_bronze_fresh.ipynb` canonicalizes columns, enforces typed schema, and applies quality checks.
+- `jobs/silver_job.py` canonicalizes columns, enforces typed schema, and applies quality checks.
+- Notebook source of truth remains `jobs/silver_clean_enrich_bronze_fresh.ipynb` for development.
 - Quality output in current run:
   - `xg_mean=0.10562219986764704`
   - `duplicate_keys=0`
 
 ### 4) Gold marts
 
-`jobs/gold_silver.ipynb` publishes:
+The gold layer is split into three job entrypoints, each on its own schedule:
 
-- `nessie.gold.player_match_kpis` (player-match KPIs)
-- `nessie.gold.player_season_kpis` (player-season KPIs + ranks)
-- `nessie.gold.player_form_last5` (rolling 5-match trend)
+- `jobs/gold_match_kpi_job.py` -> `nessie.gold.player_match_kpis` (weekly)
+- `jobs/gold_season_kpi_job.py` -> `nessie.gold.player_season_kpis` (monthly / seasonal)
+- `jobs/gold_form_last5_job.py` -> `nessie.gold.player_form_last5` (every 5 weeks)
 
 Real gold sample row (`nessie.gold.player_match_kpis` output):
 
@@ -135,6 +167,7 @@ Real gold sample row (`nessie.gold.player_match_kpis` output):
 - Nessie branch lifecycle for isolated writes and controlled promotion.
 - Gold semantic mart modeling for player analytics (volume, efficiency, contribution, form).
 - Operational validation using snapshot/file metadata and smoke tests.
+- Multi-cadence Airflow orchestration (weekly, monthly, every 5 weeks) with single-writer pools.
 
 ## Deep Concepts Learned
 
@@ -143,6 +176,7 @@ Real gold sample row (`nessie.gold.player_match_kpis` output):
 - How to design KPI marts with explicit metric taxonomy and consistent grain boundaries.
 - How to reason about Iceberg snapshots, partitions, and file-level maintenance for reliability.
 - How to structure deterministic reruns in batch pipelines without duplicate accumulation.
+- How to mix scheduled cadences against shared upstream tables without conflicting writers.
 
 ## Quick Start
 
@@ -169,10 +203,34 @@ docker exec spark /opt/spark/bin/spark-submit \
   --season-id 281
 ```
 
-Notebook stages:
+Notebook stages (development):
 
 - Silver: `jobs/silver_clean_enrich_bronze_fresh.ipynb`
 - Gold: `jobs/gold_silver.ipynb`
+
+## Orchestration
+
+Airflow runs the pipeline on independent schedules:
+
+- `bronze_silver_weekly` -> Mon 02:00 UTC
+- `gold_match_kpi_weekly` -> Mon 03:00 UTC
+- `gold_season_kpi_monthly` -> 1st of month 04:00 UTC
+- `gold_form_last5_5weeks` -> every 5 weeks
+
+Build and start the Airflow services:
+
+```bash
+docker compose build airflow-init airflow-scheduler airflow-webserver
+docker compose up -d airflow-postgres airflow-init airflow-scheduler airflow-webserver
+```
+
+Open `http://localhost:8085` (admin / admin). Manual backfill:
+
+```bash
+./scripts/run-manual-backfill.sh 9 281 10
+```
+
+See [`docs/AIRFLOW_README.md`](docs/AIRFLOW_README.md) for the full DAG topology and runbook.
 
 ## Supporting Docs
 
@@ -180,3 +238,4 @@ Notebook stages:
 - `docs/BRONZE_LAYER.md`
 - `docs/SILVER_LAYER_README.md`
 - `docs/GOLD_LAYER_README.md`
+- `docs/AIRFLOW_README.md`

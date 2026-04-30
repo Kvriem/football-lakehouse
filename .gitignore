@@ -27,3 +27,10 @@ derby.log
 # IDE
 .idea/
 .vscode/
+
+# Airflow local state
+airflow_logs/
+logs/
+*.pid
+airflow-webserver.pid
+**/__pycache__/
