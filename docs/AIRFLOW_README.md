@@ -85,7 +85,37 @@ Then open `http://localhost:8085` and log in with `admin` / `admin`.
 ./scripts/run-manual-backfill.sh 9 281 10
 ```
 
-That triggers Bronze + Silver. Once it completes, trigger Gold runs as listed in the script output.
+By default this uses Airflow REST API basic auth (`admin` / `admin`) to trigger `bronze_silver_weekly`.
+Once that run succeeds, trigger the three Gold DAGs as listed in the script output.
+
+## Runtime Issues Found and Fixes Applied
+
+During full integration testing, these issues were observed and fixed:
+
+1. **`airflow dags trigger` returned `DagNotFound` despite DAGs being listed**
+   - **Fix:** switched manual trigger flow to Airflow REST API (`/api/v1/dags/<dag_id>/dagRuns`) using basic auth.
+   - **Config added:** `AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth`.
+
+2. **Airflow task could not write bronze output files (`PermissionError`)**
+   - **Fix:** `airflow-init` now applies permissive write permissions on mounted `data/` path (`chmod -R 0777 /opt/airflow/work-dir/data`).
+   - **Fix:** run webserver/scheduler as root in local compose to avoid host mount uid mismatch.
+
+3. **Airflow task using `docker exec spark ...` failed on Docker socket permissions**
+   - **Fix:** run `airflow-webserver` and `airflow-scheduler` as root (`user: "0:0"`) in local Docker Compose.
+
+4. **Nessie merge failed: merge payload required branch hashes**
+   - **Fix:** `jobs/nessie_utils.py` now fetches source branch hash and sends:
+     - `fromRefName`
+     - `fromHash`
+   - **Fix:** merge endpoint also required target hash as `expectedHash` query parameter.
+
+5. **Spark jobs failed due to `requests` missing in Spark runtime**
+   - **Fix:** removed `requests` dependency from `jobs/nessie_utils.py`; replaced with stdlib `urllib`.
+
+6. **Spark stage failure with `No space left on device` under `/tmp`**
+   - **Symptom:** `bronze_upsert` failed with Spark block manager write errors on `/tmp`.
+   - **Root cause:** host disk pressure propagated into container overlay filesystem.
+   - **Fix during validation:** reclaimed Docker disk usage and re-ran full DAG tests.
 
 ## Concurrency and Conflict Avoidance
 
