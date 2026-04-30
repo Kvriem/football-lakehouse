@@ -31,7 +31,7 @@ Use this file as the working checklist to resolve each point and link follow-up 
 | # | File | Severity | Comment focus | Link | Status | Notes |
 |---|---|---|---|---|---|---|
 | 1 | `dags/footballiq_common.py` | Critical | Shell-safe command building in DAG helpers | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634545) | DONE | Batch 2 |
-| 2 | `dags/gold_match_weekly_dag.py` | Critical | Promotion should merge validated commit/hash deterministically | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634555) | WONTFIX | Requires larger DAG/XCom redesign; current flow validated end-to-end |
+| 2 | `dags/gold_match_weekly_dag.py` | Critical | Promotion should merge validated commit/hash deterministically | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634555) | DONE | Batch 3 |
 | 3 | `dags/gold_season_monthly_dag.py` | Major | Put promotion task in single-writer pool | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634558) | DONE | Batch 2 |
 | 4 | `docker-compose.yaml` | Major | Improve airflow-init command failure behavior | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634576) | DONE | Batch 2 |
 | 5 | `docs/AIRFLOW_README.md` | Minor | Clarify required non-Airflow services in startup steps | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634579) | DONE | f5e36a5 |

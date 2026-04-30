@@ -90,9 +90,10 @@ with DAG(
     promote_gold_to_dev = BashOperator(
         task_id="promote_gold_to_dev",
         pool=SPARK_POOL,
-        bash_command=python_in_airflow(
-            f"{AIRFLOW_WORKDIR}/jobs/promote_branch.py",
-            ["--from-ref", "gold_dev", "--into-ref", "dev"],
+        bash_command=(
+            f"python {AIRFLOW_WORKDIR}/jobs/promote_branch.py "
+            f"--from-ref gold_dev --into-ref dev "
+            f"--from-hash \"$(python {AIRFLOW_WORKDIR}/jobs/get_branch_hash.py --ref gold_dev)\""
         ),
         cwd=AIRFLOW_WORKDIR,
     )

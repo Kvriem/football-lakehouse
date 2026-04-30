@@ -22,13 +22,18 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Merge one Nessie branch into another.")
     parser.add_argument("--from-ref", required=True)
     parser.add_argument("--into-ref", required=True)
+    parser.add_argument(
+        "--from-hash",
+        default=None,
+        help="Optional source commit hash to merge deterministically.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = parse_args()
-    merge_branch(args.from_ref, args.into_ref)
+    merge_branch(args.from_ref, args.into_ref, from_hash=args.from_hash)
 
 
 if __name__ == "__main__":

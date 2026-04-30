@@ -27,6 +27,14 @@ def _get_branch_hash(nessie_url: str, branch: str) -> Optional[str]:
     return match["hash"] if match else None
 
 
+def get_branch_hash(branch: str, nessie_url: str = DEFAULT_NESSIE_URL) -> str:
+    """Return branch hash or raise if branch does not exist."""
+    branch_hash = _get_branch_hash(nessie_url, branch)
+    if branch_hash is None:
+        raise RuntimeError(f"Branch {branch!r} not found in Nessie at {nessie_url}.")
+    return branch_hash
+
+
 def ensure_branch(
     target: str,
     base: str = "main",
@@ -72,6 +80,7 @@ def ensure_branch(
 def merge_branch(
     from_ref: str,
     into_ref: str,
+    from_hash: Optional[str] = None,
     nessie_url: str = DEFAULT_NESSIE_URL,
 ) -> None:
     """Merge `from_ref` into `into_ref` via Nessie REST.
@@ -79,8 +88,8 @@ def merge_branch(
     Newer Nessie versions require `fromHash` in the merge payload.
     """
     url = f"{nessie_url}/trees/branch/{into_ref}/merge"
-    from_hash = _get_branch_hash(nessie_url, from_ref)
-    if from_hash is None:
+    source_hash = from_hash or _get_branch_hash(nessie_url, from_ref)
+    if source_hash is None:
         raise RuntimeError(f"Merge source branch {from_ref!r} not found at {nessie_url}.")
     into_hash = _get_branch_hash(nessie_url, into_ref)
     if into_hash is None:
@@ -91,7 +100,7 @@ def merge_branch(
         f"{url}?{parse.urlencode({'expectedHash': into_hash})}",
         payload={
             "fromRefName": from_ref,
-            "fromHash": from_hash,
+            "fromHash": source_hash,
         },
         timeout=60,
     )
