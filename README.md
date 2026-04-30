@@ -2,7 +2,10 @@
 
 End-to-end football analytics lakehouse using Apache Spark, Apache Iceberg, Project Nessie, MinIO, and Dremio.
 
+ 
 ![FootballIQ Architecture](docs/arch.png)
+
+![Nessie Branching](docs/nessie_branching.png)
 
 ## What This Project Delivers
 
