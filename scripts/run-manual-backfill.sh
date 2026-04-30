@@ -17,14 +17,29 @@ COMPETITION_ID="${1:-9}"
 SEASON_ID="${2:-281}"
 MAX_MATCHES="${3:-10}"
 
-CONF='{"competition_id": '"${COMPETITION_ID}"', "season_id": '"${SEASON_ID}"', "max_matches": '"${MAX_MATCHES}"'}'
+AIRFLOW_API_BASE="${AIRFLOW_API_BASE:-http://localhost:8085/api/v1}"
+AIRFLOW_USER="${AIRFLOW_USER:-admin}"
+AIRFLOW_PASS="${AIRFLOW_PASS:-admin}"
 
-echo "Triggering bronze_silver_weekly with conf=${CONF}"
-docker exec airflow-scheduler airflow dags trigger \
-  bronze_silver_weekly \
-  --conf "${CONF}"
+trigger_dag() {
+  local dag_id="$1"
+  local conf_json="$2"
+  local payload
+  payload='{"conf":'"${conf_json}"'}'
 
-echo "After Bronze+Silver succeeds, trigger Gold runs:"
-echo "  docker exec airflow-scheduler airflow dags trigger gold_match_kpi_weekly --conf '{\"season_id\": ${SEASON_ID}}'"
-echo "  docker exec airflow-scheduler airflow dags trigger gold_season_kpi_monthly --conf '{\"season_id\": ${SEASON_ID}}'"
-echo "  docker exec airflow-scheduler airflow dags trigger gold_form_last5_5weeks --conf '{\"season_id\": ${SEASON_ID}}'"
+  echo "Triggering ${dag_id} with conf=${conf_json}"
+  curl --fail --silent --show-error \
+    --user "${AIRFLOW_USER}:${AIRFLOW_PASS}" \
+    --header "Content-Type: application/json" \
+    --request POST \
+    "${AIRFLOW_API_BASE}/dags/${dag_id}/dagRuns" \
+    --data "${payload}" >/dev/null
+}
+
+trigger_dag "bronze_silver_weekly" "{\"competition_id\": ${COMPETITION_ID}, \"season_id\": ${SEASON_ID}, \"max_matches\": ${MAX_MATCHES}}"
+
+echo "After Bronze+Silver succeeds, trigger Gold runs with:"
+echo "  ${0} ${COMPETITION_ID} ${SEASON_ID} ${MAX_MATCHES}  # then call trigger_dag manually below if needed"
+echo "  curl -u ${AIRFLOW_USER}:${AIRFLOW_PASS} -H 'Content-Type: application/json' -X POST ${AIRFLOW_API_BASE}/dags/gold_match_kpi_weekly/dagRuns -d '{\"conf\":{\"season_id\":${SEASON_ID}}}'"
+echo "  curl -u ${AIRFLOW_USER}:${AIRFLOW_PASS} -H 'Content-Type: application/json' -X POST ${AIRFLOW_API_BASE}/dags/gold_season_kpi_monthly/dagRuns -d '{\"conf\":{\"season_id\":${SEASON_ID}}}'"
+echo "  curl -u ${AIRFLOW_USER}:${AIRFLOW_PASS} -H 'Content-Type: application/json' -X POST ${AIRFLOW_API_BASE}/dags/gold_form_last5_5weeks/dagRuns -d '{\"conf\":{\"season_id\":${SEASON_ID}}}'"

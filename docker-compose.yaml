@@ -224,6 +224,7 @@ services:
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
       - AIRFLOW__WEBSERVER__SECRET_KEY=footballiq-airflow-secret
@@ -240,7 +241,8 @@ services:
           --password "$${_AIRFLOW_WWW_USER_PASSWORD}" \
           --firstname Admin --lastname Admin \
           --role Admin --email admin@example.com || true &&
-        airflow pools set spark_jobs 1 "Single-writer pool for Spark/Iceberg jobs" || true
+        airflow pools set spark_jobs 1 "Single-writer pool for Spark/Iceberg jobs" || true &&
+        chmod -R 0777 /opt/airflow/work-dir/data || true
     volumes:
       - ./dags:/opt/airflow/dags
       - ./jobs:/opt/airflow/jobs
@@ -262,9 +264,11 @@ services:
         condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
+    user: "0:0"
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
       - AIRFLOW__WEBSERVER__SECRET_KEY=footballiq-airflow-secret
@@ -300,9 +304,11 @@ services:
         condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
+    user: "0:0"
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
       - AIRFLOW__WEBSERVER__SECRET_KEY=footballiq-airflow-secret

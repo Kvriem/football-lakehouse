@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
-
-import requests
+from typing import Any, Optional
+from urllib import error, parse, request
+import json
 
 
 DEFAULT_NESSIE_URL = os.environ.get("NESSIE_URL", "http://nessie:19120/api/v1")
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_branch_hash(nessie_url: str, branch: str) -> Optional[str]:
-    refs = requests.get(f"{nessie_url}/trees", timeout=30).json().get("references", [])
+    refs = _http_json("GET", f"{nessie_url}/trees", timeout=30).get("references", [])
     match = next(
         (r for r in refs if r.get("type") == "BRANCH" and r.get("name") == branch),
         None,
@@ -43,17 +43,12 @@ def ensure_branch(
         return target_hash
 
     payload = {"type": "BRANCH", "name": target, "hash": base_hash}
-    response = requests.post(
-        f"{nessie_url}/trees/tree",
-        params={"sourceRefName": base},
-        json=payload,
+    _http_json(
+        "POST",
+        f"{nessie_url}/trees/tree?{parse.urlencode({'sourceRefName': base})}",
+        payload=payload,
         timeout=30,
     )
-    if response.status_code not in (200, 201, 409):
-        raise RuntimeError(
-            f"Failed creating branch {target!r} from {base!r}: "
-            f"status={response.status_code} body={response.text}"
-        )
 
     new_hash = _get_branch_hash(nessie_url, target)
     if new_hash is None:
@@ -67,16 +62,53 @@ def merge_branch(
     into_ref: str,
     nessie_url: str = DEFAULT_NESSIE_URL,
 ) -> None:
-    """Merge `from_ref` into `into_ref` via Nessie REST."""
+    """Merge `from_ref` into `into_ref` via Nessie REST.
+
+    Newer Nessie versions require `fromHash` in the merge payload.
+    """
     url = f"{nessie_url}/trees/branch/{into_ref}/merge"
-    response = requests.post(
-        url,
-        json={"fromRefName": from_ref},
+    from_hash = _get_branch_hash(nessie_url, from_ref)
+    if from_hash is None:
+        raise RuntimeError(f"Merge source branch {from_ref!r} not found at {nessie_url}.")
+    into_hash = _get_branch_hash(nessie_url, into_ref)
+    if into_hash is None:
+        raise RuntimeError(f"Merge target branch {into_ref!r} not found at {nessie_url}.")
+
+    _http_json(
+        "POST",
+        f"{url}?{parse.urlencode({'expectedHash': into_hash})}",
+        payload={
+            "fromRefName": from_ref,
+            "fromHash": from_hash,
+        },
         timeout=60,
     )
-    if response.status_code not in (200, 201, 204):
-        raise RuntimeError(
-            f"Merge failed {from_ref} -> {into_ref}: "
-            f"status={response.status_code} body={response.text}"
-        )
     logger.info("Merged %s -> %s", from_ref, into_ref)
+
+
+def _http_json(
+    method: str,
+    url: str,
+    payload: Optional[dict[str, Any]] = None,
+    timeout: int = 30,
+) -> dict[str, Any]:
+    data = None
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    req = request.Request(url=url, data=data, headers=headers, method=method)
+    try:
+        with request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode("utf-8").strip()
+            if not body:
+                return {}
+            return json.loads(body)
+    except error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"Nessie API {method} {url} failed: status={exc.code} body={body}"
+        ) from exc
+    except error.URLError as exc:
+        raise RuntimeError(f"Nessie API {method} {url} failed: {exc}") from exc
