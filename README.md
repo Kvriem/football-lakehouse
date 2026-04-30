@@ -7,6 +7,8 @@ End-to-end football analytics lakehouse using Apache Spark, Apache Iceberg, Proj
 
 ![Nessie Branching](docs/nessie_branching.png)
 
+![Airflow Dags](docs/airflow_orchestration.png)
+
 ## What This Project Delivers
 
 - A medallion pipeline (`bronze` -> `silver` -> `gold`) for player performance analytics.
