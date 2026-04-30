@@ -21,6 +21,19 @@ AIRFLOW_API_BASE="${AIRFLOW_API_BASE:-http://localhost:8085/api/v1}"
 AIRFLOW_USER="${AIRFLOW_USER:-admin}"
 AIRFLOW_PASS="${AIRFLOW_PASS:-admin}"
 
+require_uint() {
+  local value="$1"
+  local name="$2"
+  if [[ ! "${value}" =~ ^[0-9]+$ ]]; then
+    echo "Invalid ${name}: '${value}'. Expected a non-negative integer." >&2
+    exit 1
+  fi
+}
+
+require_uint "${COMPETITION_ID}" "competition_id"
+require_uint "${SEASON_ID}" "season_id"
+require_uint "${MAX_MATCHES}" "max_matches"
+
 trigger_dag() {
   local dag_id="$1"
   local conf_json="$2"
@@ -40,6 +53,6 @@ trigger_dag "bronze_silver_weekly" "{\"competition_id\": ${COMPETITION_ID}, \"se
 
 echo "After Bronze+Silver succeeds, trigger Gold runs with:"
 echo "  ${0} ${COMPETITION_ID} ${SEASON_ID} ${MAX_MATCHES}  # then call trigger_dag manually below if needed"
-echo "  curl -u ${AIRFLOW_USER}:${AIRFLOW_PASS} -H 'Content-Type: application/json' -X POST ${AIRFLOW_API_BASE}/dags/gold_match_kpi_weekly/dagRuns -d '{\"conf\":{\"season_id\":${SEASON_ID}}}'"
-echo "  curl -u ${AIRFLOW_USER}:${AIRFLOW_PASS} -H 'Content-Type: application/json' -X POST ${AIRFLOW_API_BASE}/dags/gold_season_kpi_monthly/dagRuns -d '{\"conf\":{\"season_id\":${SEASON_ID}}}'"
-echo "  curl -u ${AIRFLOW_USER}:${AIRFLOW_PASS} -H 'Content-Type: application/json' -X POST ${AIRFLOW_API_BASE}/dags/gold_form_last5_5weeks/dagRuns -d '{\"conf\":{\"season_id\":${SEASON_ID}}}'"
+echo "  curl -u '${AIRFLOW_USER}:<AIRFLOW_PASS>' -H 'Content-Type: application/json' -X POST ${AIRFLOW_API_BASE}/dags/gold_match_kpi_weekly/dagRuns -d '{\"conf\":{\"season_id\":${SEASON_ID}}}'"
+echo "  curl -u '${AIRFLOW_USER}:<AIRFLOW_PASS>' -H 'Content-Type: application/json' -X POST ${AIRFLOW_API_BASE}/dags/gold_season_kpi_monthly/dagRuns -d '{\"conf\":{\"season_id\":${SEASON_ID}}}'"
+echo "  curl -u '${AIRFLOW_USER}:<AIRFLOW_PASS>' -H 'Content-Type: application/json' -X POST ${AIRFLOW_API_BASE}/dags/gold_form_last5_5weeks/dagRuns -d '{\"conf\":{\"season_id\":${SEASON_ID}}}'"

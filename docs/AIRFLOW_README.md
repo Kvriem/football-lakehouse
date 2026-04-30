@@ -77,6 +77,12 @@ docker compose build airflow-init airflow-scheduler airflow-webserver
 docker compose up -d airflow-postgres airflow-init airflow-scheduler airflow-webserver
 ```
 
+Start the rest of the lakehouse services required by DAG runtime calls (`docker exec spark ...`, Nessie API, MinIO storage):
+
+```bash
+docker compose up -d nessie-postgres nessie minio minio-init spark spark-worker
+```
+
 Then open `http://localhost:8085` and log in with `admin` / `admin`.
 
 ## Triggering A Manual Backfill

@@ -8,7 +8,7 @@ check_url() {
   local name="$1"
   local url="$2"
   echo "Checking ${name} at ${url}"
-  curl -fsS "${url}" >/dev/null
+  curl -fsS --connect-timeout 5 --max-time 10 "${url}" >/dev/null
 }
 
 echo "Preparing Spark runtime jars"
@@ -31,7 +31,7 @@ for i in $(seq 1 30); do
 done
 
 echo "Checking MinIO bucket exists"
-docker exec minio-init /usr/bin/mc ls local/football-lake >/dev/null 2>&1 || true
+docker exec minio-init /usr/bin/mc ls local/football-lake >/dev/null 2>&1
 docker exec minio /bin/sh -c "ls /data >/dev/null"
 
 echo "Running Spark catalog smoke query"

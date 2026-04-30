@@ -8,12 +8,23 @@ mkdir -p "${JARS_DIR}"
 download_if_missing() {
   local file_name="$1"
   local url="$2"
-  if [[ -f "${JARS_DIR}/${file_name}" ]]; then
+  local target="${JARS_DIR}/${file_name}"
+  local tmp="${target}.tmp"
+
+  if [[ -s "${target}" ]]; then
     echo "Found ${file_name}"
     return
   fi
+
+  rm -f "${tmp}"
   echo "Downloading ${file_name}"
-  curl -fL "${url}" -o "${JARS_DIR}/${file_name}"
+  if curl -fL "${url}" -o "${tmp}"; then
+    mv "${tmp}" "${target}"
+  else
+    rm -f "${tmp}"
+    echo "Failed downloading ${file_name}" >&2
+    return 1
+  fi
 }
 
 # Spark 3.5 + Scala 2.12 compatible coordinates.
