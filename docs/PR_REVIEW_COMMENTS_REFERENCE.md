@@ -22,7 +22,7 @@ Use this file as the working checklist to resolve each point and link follow-up 
 | 5 | `jobs/gold_form_last5_job.py` | Same branch-source drift concern | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167614941) | OPEN |  |
 | 6 | `docker-compose.yaml` | `|| true &&` chaining can hide failures | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167614964) | OPEN |  |
 | 7 | `jobs/nessie_utils.py` | `ensure_branch()` lifecycle/reset semantics | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167614981) | OPEN |  |
-| 8 | `scripts/smoke-test.sh` | MinIO bucket check failure suppressed | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167614997) | IN_PROGRESS | Batch 1 |
+| 8 | `scripts/smoke-test.sh` | MinIO bucket check failure suppressed | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167614997) | DONE | f5e36a5 |
 | 9 | `docker-compose.yaml` | Hardcoded local credentials/secret key | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167615016) | OPEN |  |
 | 10 | `docker-compose.yaml` | Webserver docker socket mount may be unnecessary | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167615040) | OPEN |  |
 
@@ -34,18 +34,18 @@ Use this file as the working checklist to resolve each point and link follow-up 
 | 2 | `dags/gold_match_weekly_dag.py` | Critical | Promotion should merge validated commit/hash deterministically | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634555) | OPEN |  |
 | 3 | `dags/gold_season_monthly_dag.py` | Major | Put promotion task in single-writer pool | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634558) | OPEN |  |
 | 4 | `docker-compose.yaml` | Major | Improve airflow-init command failure behavior | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634576) | OPEN |  |
-| 5 | `docs/AIRFLOW_README.md` | Minor | Clarify required non-Airflow services in startup steps | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634579) | IN_PROGRESS | Batch 1 |
+| 5 | `docs/AIRFLOW_README.md` | Minor | Clarify required non-Airflow services in startup steps | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634579) | DONE | f5e36a5 |
 | 6 | `jobs/gold_form_last5_job.py` | Critical | Rolling window order by ISO week is unsafe across year boundary | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634583) | OPEN |  |
 | 7 | `jobs/gold_match_kpi_job.py` | Major | Aggregated sum columns should be BIGINT-safe | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634588) | OPEN |  |
 | 8 | `jobs/nessie_utils.py` | Major | Make `ensure_branch` idempotent under concurrent creators | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634598) | OPEN |  |
 | 9 | `jobs/nessie_utils.py` | Major | Restrict `_http_json` URL schemes to http/https | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634606) | OPEN |  |
 | 10 | `jobs/post_write_validate.py` | Major | Add null checks on grain columns before duplicate check | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634611) | OPEN |  |
 | 11 | `jobs/silver_job.py` | Major | Run hard checks before quality-filter null removal | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634620) | OPEN |  |
-| 12 | `scripts/run-manual-backfill.sh` | Minor | Validate numeric CLI args before embedding into JSON | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634629) | IN_PROGRESS | Batch 1 |
-| 13 | `scripts/run-manual-backfill.sh` | Major | Do not echo live Airflow password in examples | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634633) | IN_PROGRESS | Batch 1 |
-| 14 | `scripts/setup_spark_jars.sh` | Major | Download to temp file + atomic move + non-zero checks | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634638) | IN_PROGRESS | Batch 1 |
-| 15 | `scripts/smoke-test.sh` | Major | Add curl timeouts in health checks | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634651) | IN_PROGRESS | Batch 1 |
-| 16 | `scripts/smoke-test.sh` | Major | Remove `|| true` from bucket existence check | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634656) | IN_PROGRESS | Batch 1 |
+| 12 | `scripts/run-manual-backfill.sh` | Minor | Validate numeric CLI args before embedding into JSON | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634629) | DONE | f5e36a5 |
+| 13 | `scripts/run-manual-backfill.sh` | Major | Do not echo live Airflow password in examples | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634633) | DONE | f5e36a5 |
+| 14 | `scripts/setup_spark_jars.sh` | Major | Download to temp file + atomic move + non-zero checks | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634638) | DONE | f5e36a5 |
+| 15 | `scripts/smoke-test.sh` | Major | Add curl timeouts in health checks | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634651) | DONE | f5e36a5 |
+| 16 | `scripts/smoke-test.sh` | Major | Remove `|| true` from bucket existence check | [link](https://github.com/Kvriem/football-lakehouse/pull/1#discussion_r3167634656) | DONE | f5e36a5 |
 
 ## Suggested Next Workflow
 
